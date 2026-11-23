@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f8a3b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hund">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<title>Hundetracker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --mut:#666; --karte:#ffffffee; --rand:#ddd; --gruen:#1f8a3b; --rot:#c62828; --gelb:#b26a00; --knopf:#f1f1f1; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111; --fg:#eee; --mut:#aaa; --karte:#1c1c1cee; --rand:#333; --knopf:#2a2a2a; } }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:15px/1.35 system-ui,-apple-system,sans-serif; }
+  #karte { position:absolute; inset:0; }
+  .box { position:absolute; z-index:500; left:10px; right:10px; background:var(--karte); border:1px solid var(--rand); border-radius:12px; padding:10px 12px; box-shadow:0 2px 10px #0003; }
+  #oben { top:calc(10px + env(safe-area-inset-top)); }
+  #unten { bottom:calc(14px + env(safe-area-inset-bottom)); display:flex; flex-wrap:wrap; gap:8px; }
+  #zustand { font-size:22px; font-weight:700; }
+  #zustand.drinnen { color:var(--gruen); } #zustand.draussen { color:var(--rot); } #zustand.weg { color:var(--gelb); }
+  #info { color:var(--mut); font-size:13px; margin-top:2px; }
+  button { flex:1 1 auto; min-height:44px; border:1px solid var(--rand); background:var(--knopf); color:var(--fg); border-radius:10px; font:inherit; font-weight:600; padding:6px 10px; }
+  button.haupt { background:#1565c0; color:#fff; border-color:#1565c0; }
+  button.warn { background:var(--rot); color:#fff; border-color:var(--rot); }
+  .nurEdit { display:none; } body.edit .nurEdit { display:block; } body.edit .nurLive { display:none; }
+  #hinweis { font-size:13px; color:var(--mut); width:100%; }
+  #einrichten { top:auto; bottom:auto; top:30%; display:none; }
+  body.setup #einrichten { display:block; } body.setup #unten { display:none; }
+  #einrichten input { width:100%; min-height:40px; margin:4px 0 8px; padding:6px 8px; border:1px solid var(--rand); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  #einrichten p { margin:0 0 8px; color:var(--mut); font-size:13px; }
+  @media (min-width:700px) { .box { left:auto; width:420px; } }
+</style>
+</head>
+<body>
+<div id="karte"></div>
+<div class="box" id="oben">
+  <div id="zustand" class="weg">Warte auf Halsband …</div>
+  <div id="info">–</div>
+</div>
+<div class="box" id="unten">
+  <button class="nurLive" id="bPause">Spaziergang (60 min Pause)</button>
+  <button class="nurLive" id="bTest">Ton testen</button>
+  <button class="nurLive" id="bFolgen">Hund zeigen</button>
+  <button class="nurLive" id="bEdit">Grenze bearbeiten</button>
+  <button class="nurLive" id="bFern" style="display:none">Unterwegs-App einrichten</button>
+  <div class="nurEdit" id="hinweis">Auf die Karte tippen = Eckpunkt setzen. Punkte lassen sich verschieben, Tippen auf einen Punkt löscht ihn. Höchstens 24 Punkte.</div>
+  <button class="nurEdit" id="bHier">Punkt = Halsband-Position</button>
+  <button class="nurEdit" id="bZurueck">Letzten Punkt weg</button>
+  <button class="nurEdit" id="bLeeren">Alle löschen</button>
+  <button class="nurEdit" id="bAbbr">Abbrechen</button>
+  <button class="nurEdit haupt" id="bSpeichern">Speichern</button>
+</div>
+<div class="box" id="einrichten">
+  <b>Unterwegs-App einrichten</b>
+  <p>Am einfachsten: zu Hause im WLAN die Station öffnen (hundetracker.local) und „Unterwegs-App einrichten“ tippen. Oder die Werte hier eintragen:</p>
+  <input id="eThema" placeholder="Thema (MQTT_THEMA)" autocapitalize="off" autocorrect="off">
+  <input id="eSchl" placeholder="Schlüssel (APP_SCHLUESSEL)" autocapitalize="off" autocorrect="off">
+  <input id="eHost" placeholder="Broker (leer = broker.hivemq.com)" autocapitalize="off" autocorrect="off">
+  <button class="haupt" id="eOk" style="width:100%">Verbinden</button>
+</div>
+<script>
+// Adresse der Unterwegs-App (nach dem Veroeffentlichen eintragen)
+const FERN_URL = 'https://kontaktmichaelbauer-source.github.io/hunde-tracker/';
+const MAXP = 24;
+const $ = id => document.getElementById(id);
+const karte = L.map('karte', { zoomControl:false }).setView([48.1, 11.5], 17);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom:20, maxNativeZoom:19, attribution:'Esri, Maxar' }).addTo(karte);
+
+const grenzLinie = L.polygon([], { color:'#ffeb3b', weight:3, fillOpacity:0.08 }).addTo(karte);
+const spur = L.polyline([], { color:'#4fc3f7', weight:2, opacity:0.8 }).addTo(karte);
+const hund = L.circleMarker([0,0], { radius:9, color:'#fff', weight:3, fillColor:'#1f8a3b', fillOpacity:1 });
+let st = null, erstesMal = true, folgen = false;
+// Betriebsart: http = direkt an der Station (Heim-WLAN), https = unterwegs ueber das Internet
+const FERN = location.protocol === 'https:' || new URLSearchParams(location.search).has('fern');
+
+// ---- Live ----
+async function holen() {
+  if (FERN) return;
+  try {
+    const r = await fetch('/api/status', { cache:'no-store' });
+    st = await r.json();
+    zeigen();
+  } catch (e) { $('zustand').textContent = 'Station nicht erreichbar'; $('zustand').className = 'weg'; }
+}
+function zeigen() {
+  if (FERN && st.t > 1.7e9 && st.da) st.alter_s = Math.max(0, Math.round(st.alter0 + Date.now() / 1000 - st.t));
+  if (!document.body.classList.contains('edit')) grenzLinie.setLatLngs(st.grenze.punkte);
+  spur.setLatLngs(st.spur);
+  const z = $('zustand');
+  if (!st.da) { z.textContent = 'Warte auf Halsband …'; z.className = 'weg'; }
+  else if (st.alter_s > 60) { z.textContent = 'Kein Signal seit ' + st.alter_s + ' s'; z.className = 'weg'; }
+  else if (st.pause) { z.textContent = 'Pause (' + st.pauseMin + ' min)'; z.className = 'weg'; }
+  else if (st.zustand === 'draussen') { z.textContent = 'DRAUSSEN – ' + st.abstand.toFixed(0) + ' m'; z.className = 'draussen'; }
+  else { z.textContent = 'Drinnen'; z.className = 'drinnen'; }
+  if (!st.grenze.punkte.length) { z.textContent += ' · keine Grenze'; }
+  const akkuPz = st.akku_mv ? Math.max(0, Math.min(100, Math.round((st.akku_mv - 3300) / 9))) : null;
+  const teile = [];
+  if (st.da) {
+    teile.push('Akku ' + (akkuPz == null ? '?' : akkuPz + ' %'));
+    teile.push(st.fix ? (st.sats + ' Sat., HDOP ' + st.hdop.toFixed(1)) : 'kein GPS');
+    teile.push('Funk ' + Math.round(st.rssi) + ' dBm');
+    teile.push('vor ' + st.alter_s + ' s');
+    if (st.grenze.version && st.halsbandGrenze !== st.grenze.version) teile.push('Grenze wird übertragen …');
+    if (st.befehlWartet) teile.push('Befehl wartet …');
+  }
+  $('info').textContent = teile.join(' · ') || '–';
+  $('bPause').textContent = st.pause ? 'Pause beenden' : 'Spaziergang (60 min Pause)';
+  if (st.fix) {
+    hund.setLatLng([st.lat, st.lon]).addTo(karte);
+    hund.setStyle({ fillColor: st.zustand === 'draussen' && !st.pause ? '#c62828' : '#1f8a3b' });
+    if (folgen) karte.panTo([st.lat, st.lon]);
+  }
+  if (erstesMal) {
+    erstesMal = false;
+    if (st.grenze.punkte.length >= 3) karte.fitBounds(grenzLinie.getBounds(), { padding:[40,40] });
+    else if (st.fix) karte.setView([st.lat, st.lon], 18);
+  }
+}
+async function befehl(b, extra) {
+  const daten = Object.assign({ befehl:b }, extra || {});
+  if (FERN) { await fernBefehl(daten); return true; }
+  const r = await fetch(b === 'grenze' ? '/api/grenze' : '/api/befehl', { method:'POST', body: JSON.stringify(daten) });
+  if (!r.ok) { alert('Fehler: ' + await r.text()); return false; }
+  holen();
+  return true;
+}
+$('bTest').onclick = () => befehl('test');
+$('bPause').onclick = () => st && st.pause ? befehl('pause_aus') : befehl('pause', { min:60 });
+$('bFolgen').onclick = () => { folgen = !folgen; $('bFolgen').textContent = folgen ? 'Nicht folgen' : 'Hund zeigen'; if (st && st.fix) karte.setView([st.lat, st.lon], 18); };
+
+// ---- Grenze bearbeiten ----
+let punkte = [], griffe = [];
+function griffeNeu() {
+  griffe.forEach(g => g.remove());
+  griffe = punkte.map((p, i) => {
+    const m = L.marker(p, { draggable:true, icon: L.divIcon({ className:'', html:'<div style="width:18px;height:18px;border-radius:50%;background:#ffeb3b;border:2px solid #000"></div>', iconSize:[18,18], iconAnchor:[9,9] }) }).addTo(karte);
+    m.on('drag', e => { punkte[i] = [e.latlng.lat, e.latlng.lng]; grenzLinie.setLatLngs(punkte); });
+    m.on('click', () => { punkte.splice(i, 1); neuZeichnen(); });
+    return m;
+  });
+}
+function neuZeichnen() { grenzLinie.setLatLngs(punkte); griffeNeu(); $('bSpeichern').textContent = 'Speichern (' + punkte.length + ' Punkte)'; }
+function punktDazu(p) {
+  if (punkte.length >= MAXP) { alert('Höchstens ' + MAXP + ' Punkte.'); return; }
+  // in die naechste Kante einfuegen, damit sich nichts kreuzt
+  if (punkte.length < 3) punkte.push(p);
+  else {
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < punkte.length; i++) {
+      const a = punkte[i], b = punkte[(i + 1) % punkte.length];
+      const d = kantenAbstand(p, a, b);
+      if (d < bd) { bd = d; best = i + 1; }
+    }
+    punkte.splice(best, 0, p);
+  }
+  neuZeichnen();
+}
+function kantenAbstand(p, a, b) {
+  const k = Math.cos(p[0] * Math.PI / 180);
+  const px = p[1] * k, py = p[0], ax = a[1] * k, ay = a[0], bx = b[1] * k, by = b[0];
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(ax + t * dx - px, ay + t * dy - py);
+}
+function editAn() {
+  punkte = (st ? st.grenze.punkte : []).map(p => [p[0], p[1]]);
+  document.body.classList.add('edit');
+  neuZeichnen();
+}
+function editAus() { document.body.classList.remove('edit'); griffe.forEach(g => g.remove()); griffe = []; holen(); }
+karte.on('click', e => { if (document.body.classList.contains('edit')) punktDazu([e.latlng.lat, e.latlng.lng]); });
+$('bEdit').onclick = editAn;
+$('bAbbr').onclick = editAus;
+$('bZurueck').onclick = () => { punkte.pop(); neuZeichnen(); };
+$('bLeeren').onclick = () => { if (confirm('Ganze Grenze löschen?')) { punkte = []; neuZeichnen(); } };
+$('bHier').onclick = () => { if (st && st.fix && st.alter_s < 30) punktDazu([st.lat, st.lon]); else alert('Halsband hat gerade kein GPS.'); };
+$('bSpeichern').onclick = async () => {
+  if (punkte.length && punkte.length < 3) { alert('Mindestens 3 Punkte.'); return; }
+  if (await befehl('grenze', { punkte })) editAus();
+};
+
+// ---- Unterwegs: verschluesselt ueber MQTT ----
+const FZ = { zugang:null, key:null, client:null };
+const enc = t => new TextEncoder().encode(t);
+function zugangLesen() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('t') && h.get('k')) {
+    const z = { thema:h.get('t'), schluessel:h.get('k'), host:h.get('h') || '', user:h.get('u') || '', pass:h.get('p') || '' };
+    try { localStorage.setItem('hundZugang', JSON.stringify(z)); } catch (e) {}
+    history.replaceState(null, '', location.pathname + location.search);   // Schluessel aus der Adresszeile
+    return z;
+  }
+  try { return JSON.parse(localStorage.getItem('hundZugang') || 'null'); } catch (e) { return null; }
+}
+async function fernEntschl(text) {
+  const raw = Uint8Array.from(atob(text), c => c.charCodeAt(0));
+  const pt = await crypto.subtle.decrypt({ name:'AES-GCM', iv: raw.slice(0, 12) }, FZ.key, raw.slice(12));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function fernVerschl(obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name:'AES-GCM', iv }, FZ.key, enc(JSON.stringify(obj))));
+  const all = new Uint8Array(12 + ct.length); all.set(iv); all.set(ct, 12);
+  let s = ''; all.forEach(b => s += String.fromCharCode(b));
+  return btoa(s);
+}
+async function fernBefehl(daten) {
+  if (!FZ.client || !FZ.client.connected) { alert('Keine Verbindung zum Internet-Dienst.'); return; }
+  daten.t = Math.floor(Date.now() / 1000);
+  FZ.client.publish('hundetracker/' + FZ.zugang.thema + '/befehl', await fernVerschl(daten));
+}
+function laden(src) { return new Promise((ok, f) => { const e = document.createElement('script'); e.src = src; e.onload = ok; e.onerror = f; document.head.appendChild(e); }); }
+async function fernStart(z) {
+  FZ.zugang = z;
+  document.body.classList.remove('setup');
+  FZ.key = await crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', enc(z.schluessel)), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  if (!window.mqtt) await laden('https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js');
+  const host = z.host || 'broker.hivemq.com';
+  $('zustand').textContent = 'Verbinde …'; $('zustand').className = 'weg';
+  st = st || { da:false, grenze:{ version:0, punkte:[] }, spur:[] };
+  const opt = { clientId:'hundapp-' + Math.random().toString(16).slice(2, 10), reconnectPeriod:3000, clean:true };
+  if (z.user) { opt.username = z.user; opt.password = z.pass; }
+  const c = FZ.client = mqtt.connect('wss://' + host + ':8884/mqtt', opt);
+  const basis = 'hundetracker/' + z.thema + '/';
+  c.on('connect', () => { c.subscribe([basis + 'status', basis + 'karte']); $('info').textContent = 'verbunden, warte auf Daten …'; });
+  c.on('offline', () => { $('zustand').textContent = 'Keine Internetverbindung'; $('zustand').className = 'weg'; });
+  c.on('message', async (thema, nachricht) => {
+    let d;
+    try { d = await fernEntschl(nachricht.toString()); }
+    catch (e) { $('zustand').textContent = 'Falscher Schlüssel'; $('zustand').className = 'weg'; return; }
+    if (thema.endsWith('/karte')) { st.grenze = d.grenze; st.spur = d.spur; }
+    else {
+      Object.assign(st, d); st.alter0 = d.alter_s;
+      if (d.fix) { const l = st.spur[st.spur.length - 1]; if (!l || l[0] !== d.lat || l[1] !== d.lon) st.spur.push([d.lat, d.lon]); }
+    }
+    zeigen();
+  });
+}
+if (FERN) {
+  const z = zugangLesen();
+  if (z) fernStart(z); else document.body.classList.add('setup');
+  $('eOk').onclick = () => {
+    const z = { thema:$('eThema').value.trim(), schluessel:$('eSchl').value.trim(), host:$('eHost').value.trim(), user:'', pass:'' };
+    if (!z.thema || !z.schluessel) { alert('Thema und Schlüssel eintragen.'); return; }
+    try { localStorage.setItem('hundZugang', JSON.stringify(z)); } catch (e) {}
+    fernStart(z);
+  };
+  setInterval(() => { if (st && st.da) zeigen(); }, 1000);
+} else {
+  $('bFern').style.display = '';
+  $('bFern').onclick = async () => {
+    if (!FERN_URL) { alert('Die Unterwegs-App ist noch nicht veröffentlicht (FERN_URL leer).'); return; }
+    const z = await fetch('/api/fern').then(r => r.json());
+    location.href = FERN_URL + '#t=' + encodeURIComponent(z.thema) + '&k=' + encodeURIComponent(z.schluessel) +
+      (z.host && z.host !== 'broker.hivemq.com' ? '&h=' + encodeURIComponent(z.host) : '');
+  };
+  holen();
+  setInterval(holen, 2000);
+}
+</script>
+</body>
+</html>

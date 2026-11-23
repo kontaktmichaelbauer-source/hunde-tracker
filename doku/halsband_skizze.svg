@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="470" viewBox="0 0 680 470" font-family="system-ui,-apple-system,Helvetica,Arial,sans-serif">
+<rect width="680" height="470" fill="#ffffff"/>
+<rect x="150" y="100" width="300" height="230" rx="16" fill="#F1EFE8" stroke="#888780" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="164" y="120" font-size="12" fill="#5F5E5A">Gehäuse IP67 (gedruckt)</text>
+<rect x="170" y="134" width="260" height="34" rx="6" fill="#E1F5EE" stroke="#0F6E56"/>
+<text x="300" y="156" font-size="14" font-weight="500" fill="#085041" text-anchor="middle">GPS-Antenne (oben, zum Himmel)</text>
+<rect x="170" y="180" width="180" height="60" rx="8" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="260" y="205" font-size="14" font-weight="500" fill="#3C3489" text-anchor="middle">Heltec Wireless</text>
+<text x="260" y="225" font-size="12" fill="#534AB7" text-anchor="middle">GPS + Funk + Chip</text>
+<rect x="362" y="180" width="68" height="60" rx="8" fill="#F1EFE8" stroke="#5F5E5A"/>
+<text x="396" y="205" font-size="14" font-weight="500" fill="#444441" text-anchor="middle">Schalt-</text>
+<text x="396" y="225" font-size="12" fill="#5F5E5A" text-anchor="middle">platine</text>
+<rect x="170" y="252" width="260" height="60" rx="8" fill="#FAECE7" stroke="#993C1D"/>
+<text x="300" y="277" font-size="14" font-weight="500" fill="#712B13" text-anchor="middle">LiPo-Akku 3000 mAh</text>
+<text x="300" y="297" font-size="12" fill="#993C1D" text-anchor="middle">3–4 Tage, USB-C laden</text>
+<circle cx="474" cy="210" r="22" fill="#FAECE7" stroke="#993C1D"/>
+<line x1="496" y1="210" x2="520" y2="210" stroke="#888780" stroke-dasharray="3 3"/>
+<text x="526" y="206" font-size="14" font-weight="500" fill="#2C2C2A">Sirene</text>
+<text x="526" y="224" font-size="12" fill="#5F5E5A">12 V, 100–110 dB</text>
+<rect x="40" y="340" width="600" height="36" rx="6" fill="#D3D1C7" stroke="#5F5E5A"/>
+<text x="60" y="362" font-size="12" fill="#444441">Breites Halsband</text>
+<rect x="250" y="386" width="100" height="26" rx="13" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="300" y="403" font-size="12" fill="#3C3489" text-anchor="middle">Vibrationsmotor</text>
+<line x1="350" y1="399" x2="520" y2="399" stroke="#888780" stroke-dasharray="3 3"/>
+<text x="526" y="396" font-size="12" fill="#5F5E5A">liegt am Hals an</text>
+<text x="526" y="414" font-size="12" fill="#5F5E5A">(innen am Band)</text>
+<text x="300" y="450" font-size="12" fill="#5F5E5A" text-anchor="middle">ca. 10 × 7 × 4 cm, rund 250 g</text>
+</svg>
