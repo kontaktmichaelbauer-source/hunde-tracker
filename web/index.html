@@ -234,9 +234,13 @@ async function fernStart(z) {
   c.on('offline', () => { $('zustand').textContent = 'Keine Internetverbindung'; $('zustand').className = 'weg'; });
   c.on('message', async (thema, nachricht) => {
     let d;
+    if (!nachricht.length) return;   // geloeschte Nachricht
     try { d = await fernEntschl(nachricht.toString()); }
     catch (e) { $('zustand').textContent = 'Falscher Schlüssel'; $('zustand').className = 'weg'; return; }
-    if (thema.endsWith('/karte')) { st.grenze = d.grenze; st.spur = d.spur; }
+    if (thema.endsWith('/karte')) {
+      st.grenze = d.grenze; st.spur = d.spur;
+      if (!FZ.gezoomt && d.grenze.punkte.length >= 3) { FZ.gezoomt = true; erstesMal = false; karte.fitBounds(L.polygon(d.grenze.punkte).getBounds(), { padding:[40,40] }); }
+    }
     else {
       Object.assign(st, d); st.alter0 = d.alter_s;
       if (d.fix) { const l = st.spur[st.spur.length - 1]; if (!l || l[0] !== d.lat || l[1] !== d.lon) st.spur.push([d.lat, d.lon]); }
